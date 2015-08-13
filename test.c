@@ -5,7 +5,8 @@
 static JNIEnv *env;
 static JavaVM *jvm;
 
-void load_driver(char* path, char* jdbc_driver_class);
+jobject load_driver(char* path, char* jdbc_driver_class);
+void print_version(jobject driver);
 
 int main(int argc, char * argv[]){
     JavaVMInitArgs  vm_args;
@@ -28,7 +29,13 @@ int main(int argc, char * argv[]){
 
     printf("Java Initialized\n");
 
-    load_driver("postgresql-9.4-1201.jdbc41.jar", "org.postgresql.Driver");
+    jobject driver = load_driver("postgresql-9.4-1201.jdbc41.jar", "org.postgresql.Driver");
+    if (driver != NULL){
+        print_version(driver);
+
+        (*env)->DeleteLocalRef(env, driver);
+        driver = NULL;
+    }
 
     (*jvm)->DestroyJavaVM(jvm);
 
@@ -36,7 +43,28 @@ int main(int argc, char * argv[]){
     return 0;
 }
 
-void load_driver(char* path, char* jdbc_driver_class){
+void print_version(jobject driver){
+    jclass cls = (*env)->GetObjectClass(env, driver);
+    jmethodID method;
+
+    method = (*env)->GetMethodID(env, cls, "getMajorVersion", "()I");
+    if (method == NULL){
+        printf("Failed to find getMajorVersion method\n");
+        return;
+    }
+    jint major = (*env)->CallIntMethod(env, driver, method);
+
+    method = (*env)->GetMethodID(env, cls, "getMinorVersion", "()I");
+    if (method == NULL){
+        printf("Failed to find getMinorVersion method\n");
+        return;
+    }
+    jint minor = (*env)->CallIntMethod(env, driver, method);
+
+    printf("Driver-Version: %d.%d\n", major, minor);
+}
+
+jobject load_driver(char* path, char* jdbc_driver_class){
     jclass  loader_class;
 
     jmethodID add_path_method;
@@ -54,22 +82,22 @@ void load_driver(char* path, char* jdbc_driver_class){
     loader_class = (*env)->FindClass(env, "DriverLoader");
     if (loader_class == NULL){
         printf("Failed to load DriverLoader\n");
-        return;
+        return NULL;
     }
     add_path_method = (*env)->GetMethodID(env, loader_class, "addPath", "(Ljava/lang/String;)V");
     if (add_path_method == NULL){
         printf("Failed to find addPath method\n");
-        return;
+        return NULL;
     }
     load_class_method = (*env)->GetMethodID(env, loader_class, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
     if (load_class_method == NULL){
         printf("Failed to find loadClass method\n");
-        return;
+        return NULL;
     }
     constructor = (*env)->GetMethodID(env, loader_class, "<init>", "()V");
     if (constructor == NULL){
         printf("Failed to find constructor\n");
-        return;
+        return NULL;
     }
 
     printf("Method found\n");
@@ -108,34 +136,11 @@ void load_driver(char* path, char* jdbc_driver_class){
     }
     printf("Got %s instance: %p\n", jdbc_driver_class, driver_instance);
 
-    version_method = (*env)->GetMethodID(env, driver_class, "getMajorVersion", "()I");
-    if (version_method == NULL){
-        printf("Failed to find getMajorVersion method");
-        goto cleanup;
-    }
-
-    printf("got get major method. Calling it\n");
-    jint major = (*env)->CallIntMethod(env, driver_instance, version_method);
-
-    version_method = (*env)->GetMethodID(env, driver_class, "getMinorVersion", "()I");
-    if (version_method == NULL){
-        printf("Failed to find getMajorVersion method");
-        goto cleanup;
-    }
-    jint minor = (*env)->CallIntMethod(env, driver_instance, version_method);
-
-    printf("Driver-Version: %d.%d\n", major, minor);
-
 cleanup:
     (*env)->DeleteLocalRef(env, jar_path);
     (*env)->DeleteLocalRef(env, driver);
     if (driver_class != NULL)
         (*env)->DeleteLocalRef(env, driver_class);
-    if (driver_instance != NULL)
-        (*env)->DeleteLocalRef(env, driver_instance);
 
-
-
-
-
+    return driver_instance;
 }
