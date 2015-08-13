@@ -7,6 +7,7 @@ static JavaVM *jvm;
 
 jobject load_driver(char* path, char* jdbc_driver_class);
 void print_version(jobject driver);
+void connect(jobject driver, char* url, char* user, char* password);
 
 int main(int argc, char * argv[]){
     JavaVMInitArgs  vm_args;
@@ -32,6 +33,7 @@ int main(int argc, char * argv[]){
     jobject driver = load_driver("postgresql-9.4-1201.jdbc41.jar", "org.postgresql.Driver");
     if (driver != NULL){
         print_version(driver);
+        connect(driver, "jdbc:postgresql:pilif", "pilif", NULL);
 
         (*env)->DeleteLocalRef(env, driver);
         driver = NULL;
@@ -41,6 +43,74 @@ int main(int argc, char * argv[]){
 
     printf("Java destroyed\n");
     return 0;
+}
+
+void connect(jobject driver, char* url, char* user, char* password){
+    jclass driver_class = (*env)->GetObjectClass(env, driver);
+    jmethodID method;
+
+    jclass prop_class = (*env)->FindClass(env, "java/util/Properties");
+    if (prop_class == NULL){
+        printf("Failed to find Properties class\n");
+        return;
+    }
+
+    method = (*env)->GetMethodID(env, prop_class, "<init>", "()V");
+    if (method == NULL){
+        printf("Failed to find Properties constructor\n");
+        return;
+    }
+    jobject properties = (*env)->NewObject(env, prop_class, method);
+    if (properties == NULL){
+        printf("Failed to instantiate Properties instance\n");
+        return;
+    }
+    method = (*env)->GetMethodID(env, prop_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    if (method == NULL){
+        printf("Failed t find put method on Properties\n");
+        return;
+    }
+
+    jstring prop_key = (*env)->NewStringUTF(env, "user");
+    jstring prop_value = (*env)->NewStringUTF(env, user);
+    (*env)->CallObjectMethod(env, properties, method, prop_key, prop_value);
+    (*env)->DeleteLocalRef(env, prop_key);
+    (*env)->DeleteLocalRef(env, prop_value);
+
+    prop_key = (*env)->NewStringUTF(env, "ApplicationName");
+    prop_value = (*env)->NewStringUTF(env, "pilif's fun project");
+    (*env)->CallObjectMethod(env, properties, method, prop_key, prop_value);
+    (*env)->DeleteLocalRef(env, prop_key);
+    (*env)->DeleteLocalRef(env, prop_value);
+
+    method = (*env)->GetMethodID(env, driver_class, "connect", "(Ljava/lang/String;Ljava/util/Properties;)Ljava/sql/Connection;");
+    if (method == NULL){
+        printf("Failed to find connect method\n");
+        return;
+    }
+
+    jstring url_string = (*env)->NewStringUTF(env, url);
+    jobject connection = (*env)->CallObjectMethod(env, driver, method, url_string, properties);
+    (*env)->DeleteLocalRef(env, url_string);
+
+    if (connection == NULL){
+        printf("Failed to connect\n");
+        return;
+    }
+
+    printf("Connection established. Instance: %p\nPress any key...", connection);
+    getchar();
+    jclass connection_class = (*env)->GetObjectClass(env, connection);
+    method = (*env)->GetMethodID(env, connection_class, "close", "()V");
+    if (method == NULL){
+        printf("Failed to find close method\n");
+        return;
+    }
+
+    (*env)->CallVoidMethod(env, connection, method);
+    printf("Closed again\n");
+    (*env)->DeleteLocalRef(env, connection);
+    connection = NULL;
 }
 
 void print_version(jobject driver){
