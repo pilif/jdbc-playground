@@ -47,7 +47,7 @@ void load_driver(char* path, char* jdbc_driver_class){
     jstring driver;
 
     jobject loader_instance = NULL;
-    jobject driver_instance = NULL;
+    jclass driver_class = NULL;
 
     loader_class = (*env)->FindClass(env, "DriverLoader");
     if (loader_class == NULL){
@@ -86,19 +86,19 @@ void load_driver(char* path, char* jdbc_driver_class){
         printf("Exception in add_path\n");
         goto cleanup;
     }
-    driver_instance = (*env)->CallObjectMethod(env, loader_instance, load_class_method, driver);
+    driver_class = (jclass)(*env)->CallObjectMethod(env, loader_instance, load_class_method, driver);
     if ((*env)->ExceptionCheck(env) == JNI_TRUE){
         (*env)->ExceptionClear(env);
         printf("Exception in load_class\n");
         goto cleanup;
     }
-    printf("Got %s instance: %p\n", jdbc_driver_class, driver_instance);
+    printf("Got %s class: %p\n", jdbc_driver_class, driver_class);
 
 cleanup:
     (*env)->DeleteLocalRef(env, jar_path);
     (*env)->DeleteLocalRef(env, driver);
-    if (driver_instance != NULL)
-        (*env)->DeleteLocalRef(env, driver_instance);
+    if (driver_class != NULL)
+        (*env)->DeleteLocalRef(env, driver_class);
 
 
 
